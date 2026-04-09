@@ -1,25 +1,28 @@
-// require("dotenv").config(); // added
-
+require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const sql = require("mssql");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 // -------- DB CONFIG --------
 const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
+  database: process.env.DB_DATABASE,
   options: {
-    encrypt: false,
-    trustServerCertificate: true
+    encrypt: process.env.DB_ENCRYPT === "true",
+    trustServerCertificate: process.env.DB_TRUST_CERT === "true"
   }
 };
 
+// -------- EVENTBRITE API TOKEN --------
+const EVENTBRITE_TOKEN = process.env.EVENTBRITE_TOKEN;
+
 // -------- GLOBALS --------
-const countries = ["india", "united-states", "united-kingdom", "australia", "germany", "france", "singapore", , "netherlands", "albania", "algeria", "andorra", "angola", "antigua-and-barbuda", "argentina", "armenia", "aruba", "austria", "azerbaijan", "the-bahamas", "bahrain", "belgium", "bolivia", "bosnia-and-herzegovina", "botswana", "brazil", "brunei", "bulgaria", "cambodia", "cameroon", "canada", "central-african-republic", "chile", "china", "colombia", "congo", "democratic-republic-of-the-congo", "costa-rica", "croatia", "curacao", "cyprus", "czech-republic", "denmark", "dominican-republic", "ecuador", "egypt", "el-salvador", "estonia", "fiji", "finland", "gambia", "ghana", "greece", "greenland", "grenada", "guatemala", "guernsey", "guinea", "guyana", "haiti", "italy--roma", "honduras", "hong-kong-sar", "hungary", "iceland", "indonesia", "iraq", "ireland", "isle-of-man", "israel", "italy", "jamaica", "japan", "jersey", "jordan", "kazakhstan", "kenya", "south-korea", "kuwait", "latvia", "lebanon", "liberia", "libya", "liechtenstein", "lithuania", "luxembourg", "mauritius", "mexico", "moldova", "monaco", "mongolia", "montenegro", "morocco", "namibia", "nepal", "new-zealand", "nicaragua", "nigeria", "niue", "norway", "oman", "pakistan", "panama", "papua-new-guinea", "paraguay", "peru", "philippines", "poland", "portugal", "qatar", "romania", "russia", "rwanda", "saint-kitts-and-nevis", "saint-lucia", "saint-vincent-and-the-grenadines", "san-marino", "saudi-arabia", "senegal", "serbia", "sint-maarten", "slovakia", "slovenia", "south-africa", "spain", "sri-lanka", "suriname", "sweden", "switzerland", "taiwan", "tajikistan", "tanzania", "thailand", "togo", "trinidad-and-tobago", "tunisia", "turkey", "turkmenistan", "uganda", "ukraine", "united-arab-emirates", "uruguay", "uzbekistan", "venezuela", "vietnam", "zambia", "zimbabwe"];
+const countries = ["india", "united-states", "united-kingdom", "australia", "germany", "france", "singapore", "netherlands", "albania", "algeria", "andorra", "angola", "antigua-and-barbuda", "argentina", "armenia", "aruba", "austria", "azerbaijan", "the-bahamas", "bahrain", "belgium", "bolivia", "bosnia-and-herzegovina", "botswana", "brazil", "brunei", "bulgaria", "cambodia", "cameroon", "canada", "central-african-republic", "chile", "china", "colombia", "congo", "democratic-republic-of-the-congo", "costa-rica", "croatia", "curacao", "cyprus", "czech-republic", "denmark", "dominican-republic", "ecuador", "egypt", "el-salvador", "estonia", "fiji", "finland", "gambia", "ghana", "greece", "greenland", "grenada", "guatemala", "guernsey", "guinea", "guyana", "haiti", "italy--roma", "honduras", "hong-kong-sar", "hungary", "iceland", "indonesia", "iraq", "ireland", "isle-of-man", "israel", "italy", "jamaica", "japan", "jersey", "jordan", "kazakhstan", "kenya", "south-korea", "kuwait", "latvia", "lebanon", "liberia", "libya", "liechtenstein", "lithuania", "luxembourg", "mauritius", "mexico", "moldova", "monaco", "mongolia", "montenegro", "morocco", "namibia", "nepal", "new-zealand", "nicaragua", "nigeria", "niue", "norway", "oman", "pakistan", "panama", "papua-new-guinea", "paraguay", "peru", "philippines", "poland", "portugal", "qatar", "romania", "russia", "rwanda", "saint-kitts-and-nevis", "saint-lucia", "saint-vincent-and-the-grenadines", "san-marino", "saudi-arabia", "senegal", "serbia", "sint-maarten", "slovakia", "slovenia", "south-africa", "spain", "sri-lanka", "suriname", "sweden", "switzerland", "taiwan", "tajikistan", "tanzania", "thailand", "togo", "trinidad-and-tobago", "tunisia", "turkey", "turkmenistan", "uganda", "ukraine", "united-arab-emirates", "uruguay", "uzbekistan", "venezuela", "vietnam", "zambia", "zimbabwe"];
 const allIDs = new Map();
 
 // -------- FETCH HTML --------
@@ -57,7 +60,7 @@ function equalArrays(a, b) {
 // -------- FETCH EVENT --------
 async function fetchEventDetails(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue&token=${process.env.EVENTBRITE_TOKEN}`;
+    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue&token=${EVENTBRITE_TOKEN}`;
     const res = await axios.get(url);
     return res.data;
   } catch (err) {
@@ -69,7 +72,7 @@ async function fetchEventDetails(eventID) {
 // -------- FETCH TICKET --------
 async function fetchTicketPrice(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/?token=${process.env.EVENTBRITE_TOKEN}`;
+    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/?token=${EVENTBRITE_TOKEN}`;
     const res = await axios.get(url);
 
     let lowest = -1;
@@ -94,7 +97,6 @@ async function fetchTicketPrice(eventID) {
 }
 
 // -------- SAVE EVENT --------
-// (UNCHANGED)
 async function saveEvent(pool, event) {
   if (!event || !event.id) return;
 
@@ -139,7 +141,33 @@ async function saveEvent(pool, event) {
       .input("cat", sql.VarChar, category)
       .input("sub", sql.VarChar, subcategory)
       .input("capacity", sql.Int, event.capacity || 0)
-      .query(`/* SAME QUERY */`);
+      .query(`
+MERGE event AS target
+USING (SELECT @id AS eventID) AS source
+ON (target.eventID = source.eventID)
+WHEN MATCHED THEN UPDATE SET
+    event_title=@title,
+    event_desc=@desc,
+    edate=@start,
+    EventEndDate=@end,
+    address=@address,
+    city=@city,
+    state=@state,
+    zipcode=@zip,
+    contact_name=@org,
+    location=@loc,
+    status=@status,
+    raccurance=@racc,
+    url=@url,
+    fee=@fee,
+    event_type=@cat,
+    event_subType=@sub,
+    CompanyName=@org,
+    numberOfseats=@capacity
+WHEN NOT MATCHED THEN
+INSERT (eventID,event_title,event_desc,edate,EventEndDate,address,city,state,zipcode,contact_name,location,status,raccurance,url,fee,event_type,event_subType,CompanyName,numberOfseats)
+VALUES (@id,@title,@desc,@start,@end,@address,@city,@state,@zip,@org,@loc,@status,@racc,@url,@fee,@cat,@sub,@org,@capacity);
+        `);
 
     console.log("Saved:", event.id);
   } catch (err) {
@@ -147,20 +175,70 @@ async function saveEvent(pool, event) {
   }
 }
 
+// -------- SCRAPER --------
+async function scrapeCountry(pool, country) {
+  let page = 1;
+  let lastIDs = [];
+
+  while (true) {
+    let url = `https://www.eventbrite.com/d/${country}/all-events/?page=${page}`;
+    let html = await getHTML(url);
+
+    if (!html) break;
+
+    let ids = extractIDs(html);
+
+    if (ids.length === 0 || equalArrays(ids, lastIDs)) break;
+
+    for (let id of ids) {
+      if (!allIDs.has(id)) {
+        allIDs.set(id, true);
+
+        let event = await fetchEventDetails(id);
+        await saveEvent(pool, event);
+
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    lastIDs = ids;
+    page++;
+  }
+}
+
+// -------- HEALTH CHECK ENDPOINT --------
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
+});
+
 // -------- MAIN --------
 async function start() {
   try {
+    // Check if all required environment variables are set
+    if (!EVENTBRITE_TOKEN) {
+      console.error("ERROR: EVENTBRITE_TOKEN environment variable is not set");
+      process.exit(1);
+    }
+
     const pool = await sql.connect(dbConfig);
     console.log("Connected to DB ✅");
 
+    // Start scraping
     for (let country of countries) {
+      console.log(`Scraping ${country}...`);
       await scrapeCountry(pool, country);
     }
 
     console.log("Total Events:", allIDs.size);
   } catch (err) {
-    console.error(err);
+    console.error("Fatal error:", err);
+    process.exit(1);
   }
 }
 
-start();
+// Start the server and scraper
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  // Start scraping after server is up
+  start();
+}); s
