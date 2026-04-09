@@ -211,6 +211,17 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
+// Endpoint to get all events in JSON
+app.get("/events", async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+    const result = await pool.request().query("SELECT * FROM event");
+    res.json(result.recordset); // send database rows as JSON
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // -------- MAIN --------
 async function start() {
   try {
