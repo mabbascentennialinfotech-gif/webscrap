@@ -1,4 +1,4 @@
-require("dotenv").config(); // added
+// require("dotenv").config(); // added
 
 const express = require("express");
 const axios = require("axios");
