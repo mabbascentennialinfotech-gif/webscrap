@@ -55,7 +55,7 @@ function equalArrays(a, b) {
 // -------- FETCH EVENT --------
 async function fetchEventDetails(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue&token=YOUR_PRIVATE_TOKEN`;
+    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue&token=2YNLKMOF6AGHSGQTZQ32`;
     const res = await axios.get(url);
     return res.data;
   } catch (err) {
@@ -67,7 +67,7 @@ async function fetchEventDetails(eventID) {
 // -------- FETCH TICKET --------
 async function fetchTicketPrice(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/?token=YOUR_PRIVATE_TOKEN`;
+    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/?token=2YNLKMOF6AGHSGQTZQ32`;
     const res = await axios.get(url);
 
     let lowest = -1;
@@ -81,7 +81,7 @@ async function fetchTicketPrice(eventID) {
 
       let total = cost + fee + tax;
 
-      if (total === 0) return "0.00";
+      if (total === 0) return "0.00"
       if (lowest < 0 || total < lowest) lowest = total;
     }
 
