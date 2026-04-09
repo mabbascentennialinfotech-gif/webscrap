@@ -1,4 +1,4 @@
-// require("dotenv").config();
+require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const sql = require("mssql");
@@ -241,4 +241,4 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   // Start scraping after server is up
   start();
-}); s
+});
