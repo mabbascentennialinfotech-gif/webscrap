@@ -4,12 +4,12 @@ const sql = require("mssql");
 
 const app = express();
 
-// -------- DB CONFIG --------
+// -------- DB CONFIG (ENV) --------
 const dbConfig = {
-  user: "db_a88f53_oecollect_admin",
-  password: "Pankaj_Kumar036",
-  server: "sql5075.site4now.net",
-  database: "db_a88f53_oecollect",
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  server: process.env.DB_SERVER,
+  database: process.env.DB_NAME,
   options: {
     encrypt: false,
     trustServerCertificate: true
@@ -17,8 +17,10 @@ const dbConfig = {
 };
 
 // -------- GLOBALS --------
-const countries = ["india", "united-states", "united-kingdom", "australia", "germany", "france", "singapore", , "netherlands", "albania", "algeria", "andorra", "angola", "antigua-and-barbuda", "argentina", "armenia", "aruba", "austria", "azerbaijan", "the-bahamas", "bahrain", "belgium", "bolivia", "bosnia-and-herzegovina", "botswana", "brazil", "brunei", "bulgaria", "cambodia", "cameroon", "canada", "central-african-republic", "chile", "china", "colombia", "congo", "democratic-republic-of-the-congo", "costa-rica", "croatia", "curacao", "cyprus", "czech-republic", "denmark", "dominican-republic", "ecuador", "egypt", "el-salvador", "estonia", "fiji", "finland", "gambia", "ghana", "greece", "greenland", "grenada", "guatemala", "guernsey", "guinea", "guyana", "haiti", "italy--roma", "honduras", "hong-kong-sar", "hungary", "iceland", "indonesia", "iraq", "ireland", "isle-of-man", "israel", "italy", "jamaica", "japan", "jersey", "jordan", "kazakhstan", "kenya", "south-korea", "kuwait", "latvia", "lebanon", "liberia", "libya", "liechtenstein", "lithuania", "luxembourg", "mauritius", "mexico", "moldova", "monaco", "mongolia", "montenegro", "morocco", "namibia", "nepal", "new-zealand", "nicaragua", "nigeria", "niue", "norway", "oman", "pakistan", "panama", "papua-new-guinea", "paraguay", "peru", "philippines", "poland", "portugal", "qatar", "romania", "russia", "rwanda", "saint-kitts-and-nevis", "saint-lucia", "saint-vincent-and-the-grenadines", "san-marino", "saudi-arabia", "senegal", "serbia", "sint-maarten", "slovakia", "slovenia", "south-africa", "spain", "sri-lanka", "suriname", "sweden", "switzerland", "taiwan", "tajikistan", "tanzania", "thailand", "togo", "trinidad-and-tobago", "tunisia", "turkey", "turkmenistan", "uganda", "ukraine", "united-arab-emirates", "uruguay", "uzbekistan", "venezuela", "vietnam", "zambia", "zimbabwe"];
+const countries = ["india", "united-states", "united-kingdom"];
 const allIDs = new Map();
+
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
 // -------- FETCH HTML --------
 async function getHTML(url) {
@@ -28,7 +30,7 @@ async function getHTML(url) {
       timeout: 15000
     });
     return res.data;
-  } catch (err) {
+  } catch {
     return "";
   }
 }
@@ -46,20 +48,20 @@ function extractIDs(html) {
   return Array.from(ids);
 }
 
-// -------- COMPARE --------
-function equalArrays(a, b) {
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
-
 // -------- FETCH EVENT --------
 async function fetchEventDetails(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue&token=2YNLKMOF6AGHSGQTZQ32`;
-    const res = await axios.get(url);
+    const res = await axios.get(
+      `https://www.eventbriteapi.com/v3/events/${eventID}/?expand=organizer,category,subcategory,venue`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.EVENTBRITE_TOKEN}`
+        }
+      }
+    );
     return res.data;
   } catch (err) {
-    console.log("API Error:", err.message);
+    console.log("Event API Error:", err.response?.status);
     return null;
   }
 }
@@ -67,8 +69,14 @@ async function fetchEventDetails(eventID) {
 // -------- FETCH TICKET --------
 async function fetchTicketPrice(eventID) {
   try {
-    const url = `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/?token=2YNLKMOF6AGHSGQTZQ32`;
-    const res = await axios.get(url);
+    const res = await axios.get(
+      `https://www.eventbriteapi.com/v3/events/${eventID}/ticket_classes/`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.EVENTBRITE_TOKEN}`
+        }
+      }
+    );
 
     let lowest = -1;
 
@@ -81,12 +89,13 @@ async function fetchTicketPrice(eventID) {
 
       let total = cost + fee + tax;
 
-      if (total === 0) return "0.00"
+      if (total === 0) return "0.00";
       if (lowest < 0 || total < lowest) lowest = total;
     }
 
     return lowest < 0 ? "0.00" : lowest.toFixed(2);
-  } catch {
+  } catch (err) {
+    console.log("Ticket API Error:", err.response?.status);
     return "0.00";
   }
 }
@@ -136,8 +145,7 @@ async function saveEvent(pool, event) {
       .input("cat", sql.VarChar, category)
       .input("sub", sql.VarChar, subcategory)
       .input("capacity", sql.Int, event.capacity || 0)
-      .query(`
-MERGE event AS target
+      .query(`MERGE event AS target
 USING (SELECT @id AS eventID) AS source
 ON (target.eventID = source.eventID)
 WHEN MATCHED THEN UPDATE SET
@@ -161,8 +169,7 @@ WHEN MATCHED THEN UPDATE SET
     numberOfseats=@capacity
 WHEN NOT MATCHED THEN
 INSERT (eventID,event_title,event_desc,edate,EventEndDate,address,city,state,zipcode,contact_name,location,status,raccurance,url,fee,event_type,event_subType,CompanyName,numberOfseats)
-VALUES (@id,@title,@desc,@start,@end,@address,@city,@state,@zip,@org,@loc,@status,@racc,@url,@fee,@cat,@sub,@org,@capacity);
-        `);
+VALUES (@id,@title,@desc,@start,@end,@address,@city,@state,@zip,@org,@loc,@status,@racc,@url,@fee,@cat,@sub,@org,@capacity);`);
 
     console.log("Saved:", event.id);
   } catch (err) {
@@ -171,19 +178,10 @@ VALUES (@id,@title,@desc,@start,@end,@address,@city,@state,@zip,@org,@loc,@statu
 }
 
 // -------- SCRAPER --------
-async function scrapeCountry(pool, country) {
-  let page = 1;
-  let lastIDs = [];
-
-  while (true) {
-    let url = `https://www.eventbrite.com/d/${country}/all-events/?page=${page}`;
-    let html = await getHTML(url);
-
-    if (!html) break;
-
+async function scrape(pool) {
+  for (let country of countries) {
+    let html = await getHTML(`https://www.eventbrite.com/d/${country}/all-events/`);
     let ids = extractIDs(html);
-
-    if (ids.length === 0 || equalArrays(ids, lastIDs)) break;
 
     for (let id of ids) {
       if (!allIDs.has(id)) {
@@ -192,12 +190,9 @@ async function scrapeCountry(pool, country) {
         let event = await fetchEventDetails(id);
         await saveEvent(pool, event);
 
-        await new Promise(r => setTimeout(r, 300));
+        await delay(1000); // slow down
       }
     }
-
-    lastIDs = ids;
-    page++;
   }
 }
 
@@ -207,14 +202,22 @@ async function start() {
     const pool = await sql.connect(dbConfig);
     console.log("Connected to DB ✅");
 
-    for (let country of countries) {
-      await scrapeCountry(pool, country);
-    }
+    await scrape(pool);
 
-    console.log("Total Events:", allIDs.size);
+    console.log("Done. Total:", allIDs.size);
   } catch (err) {
     console.error(err);
   }
 }
 
-start();
+// -------- SERVER (Render needs this) --------
+const PORT = process.env.PORT || 3000;
+
+app.get("/", (req, res) => {
+  res.send("Scraper running");
+});
+
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+  start(); // run scraper
+});
