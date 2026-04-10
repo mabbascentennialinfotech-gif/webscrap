@@ -25,6 +25,35 @@ app.get('/', (req, res) => {
   res.send('Server is running! X-Frame-Options is enabled.');
 });
 
+// ========== NEW /events ENDPOINT ==========
+app.get('/events', async (req, res) => {
+  try {
+    const pool = await sql.connect(dbConfig);
+
+    const result = await pool.request()
+      .query(`
+        SELECT eventID, event_title, event_desc, edate, EventEndDate, 
+               address, city, state, zipcode, location, contact_name,
+               status, raccurance, url, fee, event_type, event_subType, 
+               CompanyName, numberOfseats
+        FROM event 
+        ORDER BY edate DESC
+      `);
+
+    res.json({
+      success: true,
+      count: result.recordset.length,
+      events: result.recordset
+    });
+  } catch (err) {
+    console.error("Error fetching events:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 // -------- GLOBALS --------
 const countries = ["india", "united-states", "united-kingdom", "australia", "germany", "france", "singapore", , "netherlands", "albania", "algeria", "andorra", "angola", "antigua-and-barbuda", "argentina", "armenia", "aruba", "austria", "azerbaijan", "the-bahamas", "bahrain", "belgium", "bolivia", "bosnia-and-herzegovina", "botswana", "brazil", "brunei", "bulgaria", "cambodia", "cameroon", "canada", "central-african-republic", "chile", "china", "colombia", "congo", "democratic-republic-of-the-congo", "costa-rica", "croatia", "curacao", "cyprus", "czech-republic", "denmark", "dominican-republic", "ecuador", "egypt", "el-salvador", "estonia", "fiji", "finland", "gambia", "ghana", "greece", "greenland", "grenada", "guatemala", "guernsey", "guinea", "guyana", "haiti", "italy--roma", "honduras", "hong-kong-sar", "hungary", "iceland", "indonesia", "iraq", "ireland", "isle-of-man", "israel", "italy", "jamaica", "japan", "jersey", "jordan", "kazakhstan", "kenya", "south-korea", "kuwait", "latvia", "lebanon", "liberia", "libya", "liechtenstein", "lithuania", "luxembourg", "mauritius", "mexico", "moldova", "monaco", "mongolia", "montenegro", "morocco", "namibia", "nepal", "new-zealand", "nicaragua", "nigeria", "niue", "norway", "oman", "pakistan", "panama", "papua-new-guinea", "paraguay", "peru", "philippines", "poland", "portugal", "qatar", "romania", "russia", "rwanda", "saint-kitts-and-nevis", "saint-lucia", "saint-vincent-and-the-grenadines", "san-marino", "saudi-arabia", "senegal", "serbia", "sint-maarten", "slovakia", "slovenia", "south-africa", "spain", "sri-lanka", "suriname", "sweden", "switzerland", "taiwan", "tajikistan", "tanzania", "thailand", "togo", "trinidad-and-tobago", "tunisia", "turkey", "turkmenistan", "uganda", "ukraine", "united-arab-emirates", "uruguay", "uzbekistan", "venezuela", "vietnam", "zambia", "zimbabwe"];
 const allIDs = new Map();
@@ -226,14 +255,13 @@ async function start() {
   }
 }
 
-// =============================================
-// ✅ ADD THIS AT THE VERY BOTTOM OF YOUR FILE
-// =============================================
-
-// Start the web server (THIS WAS MISSING!)
+// Start the web server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`✅ X-Frame-Options: ALLOWALL is active`);
+  console.log(`✅ Events endpoint: http://localhost:${PORT}/events`);
 });
 
+// Uncomment below if you want the scraper to run automatically
+// start();
