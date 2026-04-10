@@ -276,6 +276,35 @@ app.get("/status", (req, res) => {
 
   res.send(output);
 });
+
+
+
+// ========== ADD THIS NEW ROUTE (keep all your existing code) ==========
+app.get("/scrape/:country", async (req, res) => {
+  const country = req.params.country;
+
+  res.json({
+    message: `Scraping ${country} started. Check database in 2 minutes.`,
+    country: country
+  });
+
+  try {
+    const pool = await sql.connect(dbConfig);
+    const existingIDs = await loadExistingIDs(pool);
+    await scrapeCountry(pool, country, existingIDs);
+    console.log(`✅ Finished scraping ${country}`);
+  } catch (err) {
+    console.error(`❌ Error scraping ${country}:`, err.message);
+  }
+});
+// ========== END OF NEW ROUTE ==========
+
+
+
+
+
+
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
