@@ -262,43 +262,30 @@ app.get("/", (req, res) => {
         <p><a href="/status">View Processed IDs</a></p>
     `);
 });
-
-app.get("/status", (req, res) => {
-  let output = "<h2>Processed IDs</h2>";
-  output += `<p>Total: ${allIDs.size}</p>`;
-  output += "<ul>";
-
-  for (let id of Array.from(allIDs.keys()).slice(0, 100)) {
-    output += `<li>${id}</li>`;
-  }
-
-  output += "</ul>";
-
-  res.send(output);
-});
-
-
-
-// ========== ADD THIS NEW ROUTE (keep all your existing code) ==========
-app.get("/scrape/:country", async (req, res) => {
-  const country = req.params.country;
-
-  res.json({
-    message: `Scraping ${country} started. Check database in 2 minutes.`,
-    country: country
-  });
-
+app.get("/status", async (req, res) => {
   try {
     const pool = await sql.connect(dbConfig);
-    const existingIDs = await loadExistingIDs(pool);
-    await scrapeCountry(pool, country, existingIDs);
-    console.log(`✅ Finished scraping ${country}`);
+
+    const result = await pool.request()
+      .query("SELECT eventID, event_title, city FROM event ORDER BY edate DESC");
+
+    let output = "<h2>Event IDs Saved in Database</h2>";
+    output += `<p>Total IDs: ${result.recordset.length}</p>`;
+    output += "<ul>";
+
+    for (let row of result.recordset) {
+      output += `<li><strong>${row.eventID}</strong>`;
+    }
+
+    output += "</ul>";
+    output += "<p><a href='/'>Back to Home</a></p>";
+
+    res.send(output);
+
   } catch (err) {
-    console.error(`❌ Error scraping ${country}:`, err.message);
+    res.send(`<h2>Error</h2><p>${err.message}</p>`);
   }
 });
-// ========== END OF NEW ROUTE ==========
-
 
 
 
